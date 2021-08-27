@@ -1,0 +1,101 @@
+From d5d19f0b7886059f27f7df05ceb5e991fdd4fff1 Mon Sep 17 00:00:00 2001
+From: wangguokun <wgkgit@126.com>
+Date: Fri, 27 Aug 2021 15:09:41 +0800
+Subject: [PATCH] =?UTF-8?q?[mod|add]=20=E5=B0=9D=E8=AF=95=E6=B7=BB?=
+ =?UTF-8?q?=E5=8A=A0=E7=B3=BB=E7=BB=9F=E8=B0=83=E7=94=A8first=5Fcompile=5F?=
+ =?UTF-8?q?test,=E8=BE=93=E5=87=BA=E5=86=85=E6=A0=B8=E7=BC=96=E8=AF=91?=
+ =?UTF-8?q?=E9=94=99=E8=AF=AF=E4=BF=A1=E6=81=AF=E5=88=B0error.log?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ arch/x86/entry/syscalls/syscall_64.tbl |  1 +
+ error.log                              | 36 ++++++++++++++++++++++++++
+ include/linux/syscalls.h               |  1 +
+ kernel/sys.c                           |  5 ++++
+ 4 files changed, 43 insertions(+)
+ create mode 100644 error.log
+
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index cf115576..15fb39c4 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -341,6 +341,7 @@
+ 330	common	pkey_alloc		__x64_sys_pkey_alloc
+ 331	common	pkey_free		__x64_sys_pkey_free
+ 332	common	statx			__x64_sys_statx
++333     common  first_compile_test      __x64_sys_first_compile_test
+ #
+ # x32-specific system call numbers start at 512 to avoid cache impact
+ # for native 64-bit operation. The __x32_compat_sys stubs are created
+diff --git a/error.log b/error.log
+new file mode 100644
+index 00000000..41c4c0a4
+--- /dev/null
++++ b/error.log
+@@ -0,0 +1,36 @@
++fs/jffs2/xattr.c: In function ‘jffs2_build_xattr_subsystem’:
++fs/jffs2/xattr.c:887:1: warning: the frame size of 1120 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/cpufreq/cpufreq_ondemand.c: In function ‘od_set_powersave_bias’:
++drivers/cpufreq/cpufreq_ondemand.c:449:1: warning: the frame size of 1032 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/hv/channel_mgmt.c: In function ‘init_vp_index’:
++drivers/hv/channel_mgmt.c:709:1: warning: the frame size of 1032 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/net/ethernet/huawei/hinic/hinic_rx.c: In function ‘rx_request_irq’:
++drivers/net/ethernet/huawei/hinic/hinic_rx.c:436:1: warning: the frame size of 1040 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/net/ethernet/neterion/vxge/vxge-main.c: In function ‘VXGE_COMPLETE_VPATH_TX.isra.35’:
++drivers/net/ethernet/neterion/vxge/vxge-main.c:119:1: warning: the frame size of 1048 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/scsi/storvsc_drv.c: In function ‘get_og_chn’:
++drivers/scsi/storvsc_drv.c:1280:1: warning: the frame size of 1032 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/scsi/storvsc_drv.c: In function ‘storvsc_do_io’:
++drivers/scsi/storvsc_drv.c:1365:1: warning: the frame size of 1032 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/usb/misc/usbtest.c: In function ‘test_queue’:
++drivers/usb/misc/usbtest.c:2126:1: warning: the frame size of 1184 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
++drivers/vhost/scsi.c: In function ‘vhost_scsi_flush’:
++drivers/vhost/scsi.c:1142:1: warning: the frame size of 1032 bytes is larger than 1024 bytes [-Wframe-larger-than=]
++ }
++ ^
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 2599a19c..1d7f158e 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -1267,5 +1267,6 @@ static inline long ksys_truncate(const char __user *pathname, loff_t length)
+ {
+ 	return do_sys_truncate(pathname, length);
+ }
++asmlinkage long sys_first_compile_test(int a, int b);
+ #endif
+ 
+diff --git a/kernel/sys.c b/kernel/sys.c
+index d1b2b8d9..5c577871 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2640,4 +2640,9 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
+ 
+ 	return 0;
+ }
++SYSCALL_DEFINE2(first_compile_test,int, a, int,b)
++{
++        printk(KERN_ALERT"input a + b = %d\n",a+b);
++        return 0;
++}
+ #endif /* CONFIG_COMPAT */
+-- 
+2.17.1
+
