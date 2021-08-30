@@ -1,0 +1,132 @@
+From 83166e8df27f5e3313e17c8684a3a9f85af3cc8e Mon Sep 17 00:00:00 2001
+From: wangguokun <wgkgit@126.com>
+Date: Mon, 30 Aug 2021 19:58:54 +0800
+Subject: [PATCH] [mod] visual address page to phsical frame | output current
+ process stack address
+
+---
+ arch/x86/entry/syscalls/syscall_64.tbl |  2 +
+ include/linux/syscalls.h               |  2 +
+ kernel/sys.c                           | 83 ++++++++++++++++++++++++++
+ 3 files changed, 87 insertions(+)
+
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index 15fb39c4..d8b068c8 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -342,6 +342,8 @@
+ 331	common	pkey_free		__x64_sys_pkey_free
+ 332	common	statx			__x64_sys_statx
+ 333     common  first_compile_test      __x64_sys_first_compile_test
++334     common  sclab                   __x64_sys_sclab
++
+ #
+ # x32-specific system call numbers start at 512 to avoid cache impact
+ # for native 64-bit operation. The __x32_compat_sys stubs are created
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 1d7f158e..90f1ea05 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -1268,5 +1268,7 @@ static inline long ksys_truncate(const char __user *pathname, loff_t length)
+ 	return do_sys_truncate(pathname, length);
+ }
+ asmlinkage long sys_first_compile_test(int a, int b);
++
++asmlinkage long sys_sclab();
+ #endif
+ 
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 5c577871..0cd0d81b 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2645,4 +2645,87 @@ SYSCALL_DEFINE2(first_compile_test,int, a, int,b)
+         printk(KERN_ALERT"input a + b = %d\n",a+b);
+         return 0;
+ }
++
++static unsigned long vp_to_pp(unsigned long address,struct mm_struct *mm)                  
++{
++	pgd_t *pgd;
++	p4d_t *p4d;
++	pud_t *pud;
++	pmd_t *pmd;
++	pte_t *pte;
++	unsigned long PFN = 0x0;
++
++	pgd = pgd_offset(mm,address);
++	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd))){
++		return 0;
++	}
++
++
++	p4d = p4d_offset(pgd,address);				
++	if (p4d_none(*p4d) || unlikely(p4d_bad(*p4d))){
++		return 0;
++	}
++
++	pud = pud_offset(p4d,address);
++	if (pud_none(*pud) || unlikely(pud_bad(*pud))){
++		return 0;
++	}
++
++	pmd = pmd_offset(pud,address);
++	if (pmd_none(*pmd) || unlikely(pmd_bad(*pmd))){
++		return 0;
++	}
++
++	pte = pte_offset_kernel(pmd,address);
++	if (pte_none(*pte)){
++		return 0;
++	}
++
++	PFN = pte_pfn(*pte);
++	return PFN;
++
++}
++SYSCALL_DEFINE0(sclab){
++
++	struct task_struct *sctask;
++	struct mm_struct *scmm;
++	struct vm_area_struct *scmmap;
++
++	unsigned long tra_vpaddr;                                  
++	unsigned long PFN;														                                                                    
++
++	unsigned int statistic_vp = 0x0;														
++	unsigned int statistic_pfn = 0x0; 												
++
++	printk("CONFIG_PGTABLE_LEVELS: %d ",CONFIG_PGTABLE_LEVELS);
++
++	sctask = current;
++	scmm = sctask->mm;
++	scmmap = scmm->mmap;
++
++	printk("task->pid:%d",sctask->pid);
++	printk("task->comm:%s",sctask->comm);
++
++	while(scmmap != NULL){					
++		for(tra_vpaddr = scmmap->vm_start; tra_vpaddr < scmmap->vm_end; tra_vpaddr += PAGE_SIZE)  
++		{
++			statistic_vp++;
++			PFN = vp_to_pp(tra_vpaddr,scmm);                                        			
++			if(!PFN){																				
++				continue;
++			}
++			statistic_pfn++;
++			printk("VP:%lx  PFN:%lx\n",tra_vpaddr,PFN);
++		}
++		scmmap = scmmap->vm_next;
++	}
++
++	printk("statistic_vp_number:%d statistic_pfn_number:%d",statistic_vp,statistic_pfn);
++
++	printk("TASK_STACK:%lx\n",*(unsigned long *)(sctask->stack));
++
++	printk("end output !\n");
++	return 0;
++}
++
+ #endif /* CONFIG_COMPAT */
+-- 
+2.17.1
+
