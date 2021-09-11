@@ -1,0 +1,213 @@
+From 67e74f7040bfa8dcc844d11891e060e568c9a818 Mon Sep 17 00:00:00 2001
+From: wangguokun <wgkgit@126.com>
+Date: Sat, 11 Sep 2021 21:52:03 +0800
+Subject: [PATCH] [mod] lab third step---output disk number(unverified)
+
+---
+ kernel/sys.c | 180 ++++++++++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 149 insertions(+), 31 deletions(-)
+
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 0cd0d81b..e010ec4d 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2685,47 +2685,165 @@ static unsigned long vp_to_pp(unsigned long address,struct mm_struct *mm)
+ 	return PFN;
+ 
+ }
++/* 通过get_block()获取磁盘块号 */
++static int sclab_buffer_bmap(struct file * scfl, int * dblk)
++{
++        struct address_space *mapping = scfl->f_mapping;
++        int res, block;
++        if (!mapping->a_ops->bmap)
++                return -EINVAL;
++        if (!capable(CAP_SYS_RAWIO))
++                 return -EPERM;
++        block = *dblk;
++        res = mapping->a_ops->bmap(mapping, block);
++        *dblk = res;
++        return 0;
++}
++
++/* 打印文件的磁盘块号 */
++static void sclab_fs_print_disk(struct file * scfl)
++{
++        struct inode * scinode;
++        loff_t fsize;
++        unsigned int scfsize = 0;
++        unsigned long bcount_total;
++        unsigned long bcount;
++        unsigned int blocksize;
++        int dblk;
++        int tra;
++        int erro = 1;
++
++        /* 获取文件inode */
++        scinode = scfl->f_path.dentry->d_inode;
++        printk("step-(get inode)\n");
++
++        /* 获取文件的磁盘块总数 */
++        fsize = scinode->i_size;
++        scfsize  = (int)fsize;
++        printk("scfize: %d\n",scfsize);
++        bcount_total = scinode->i_blocks;
++        blocksize = (1 << scinode->i_blkbits);
++        bcount = (scfsize + blocksize -1) / blocksize;
++        printk("Bcount_t: %lu   BlockSizze: %d     Bcount: %lu\n", bcount_total,blocksize,bcount);
++
++        /* 打印inode的磁盘块号 */
++        for(tra = 0; tra < bcount; tra++)
++        {
++                dblk = tra;
++                erro = sclab_buffer_bmap(scfl,&dblk);
++                if(!erro){
++                        printk("Can't found disk number, the error code is %d\n",erro);
++                        return;
++                }
++                printk("iBlock: %d      disk Block: %lu\n",tra,dblk);
++        }
++
++}
++
++/* 打印函数，传入fdtable，打印其占据的磁盘块总数，和对应的磁盘块号 */
++static void sclab_fs_print(struct fdtable * scfdt)
++{
++        /* 变量定义 */
++        unsigned long tmp = 0;
++        unsigned int size = 0;
++        unsigned int index = 0;
++        unsigned int max_allow_index =scfdt->max_fds / BITS_PER_LONG;
++        unsigned int fd = 0;
++        int tra = 0;
++
++        printk("start print filessystem!\n");
++        printk("max_fds: %d\n",scfdt->max_fds);
++
++        /* 依次遍历max_allow_index之前的向量，查找已分配的fd描述符 */
++        while(tra < max_allow_index)
++        {
++                index = 0;
++                tmp = *(scfdt->open_fds + tra);
++
++                /* 依次遍历向量每一bit位，如果是1，则表示已分配，获取其在open_fds中的索引存放在fd_index_array数组中 */
++                while(index < BITS_PER_LONG && tmp)
++                {
++                        if(tmp % 2 == 1)
++                        {
++                                fd = index + tra * BITS_PER_LONG;
++                                printk("fd:%d\n",fd);
++                                sclab_fs_print_disk(scfdt->fd[fd]);
++                        }
++                        tmp = tmp >> 1;
++                        index++;
++                }
++                tra++;
++        }
++
++        /* 查找max_fds所在向量剩余可用bit位是否已分配了fd(当max_fds是BITS_PER_LONG整数倍时跳过，不然会越界) */
++        if(scfdt->max_fds % BITS_PER_LONG != 0)
++        {
++                size = scfdt->max_fds - max_allow_index * BITS_PER_LONG;
++                tmp = *(scfdt->open_fds + max_allow_index);
++                tmp &= (~0UL >> (BITS_PER_LONG - size));
++                index = 0;
++                printk("step3!\n");
++                while(index < BITS_PER_LONG && tmp)
++                {
++                        if(tmp % 2 == 1)
++                        {
++                                fd = index + max_allow_index * BITS_PER_LONG;
++                                printk("fd:%d\n",fd);
++                                sclab_fs_print_disk(scfdt->fd[fd]);
++                        }
++                        tmp = tmp >> 1;
++                        index++;
++                }
++        }
++}
+ SYSCALL_DEFINE0(sclab){
+ 
+-	struct task_struct *sctask;
+-	struct mm_struct *scmm;
+-	struct vm_area_struct *scmmap;
++        struct task_struct *sctask;
++        struct mm_struct *scmm;
++        struct vm_area_struct *scmmap;
++        struct files_struct *scfiles;
++        struct fdtable *scfdt;
+ 
+-	unsigned long tra_vpaddr;                                  
+-	unsigned long PFN;														                                                                    
++        unsigned long tra_vpaddr;
++        unsigned long PFN;
+ 
+-	unsigned int statistic_vp = 0x0;														
+-	unsigned int statistic_pfn = 0x0; 												
++        unsigned int statistic_vp = 0x0;
++        unsigned int statistic_pfn = 0x0;
+ 
+-	printk("CONFIG_PGTABLE_LEVELS: %d ",CONFIG_PGTABLE_LEVELS);
+ 
+-	sctask = current;
+-	scmm = sctask->mm;
+-	scmmap = scmm->mmap;
++        printk("CONFIG_PGTABLE_LEVELS: %d ",CONFIG_PGTABLE_LEVELS);
+ 
+-	printk("task->pid:%d",sctask->pid);
+-	printk("task->comm:%s",sctask->comm);
++        sctask = current;
++        scmm = sctask->mm;
++        scmmap = scmm->mmap;
++        scfiles = sctask->files;
++        scfdt = scfiles->fdt;
+ 
+-	while(scmmap != NULL){					
+-		for(tra_vpaddr = scmmap->vm_start; tra_vpaddr < scmmap->vm_end; tra_vpaddr += PAGE_SIZE)  
+-		{
+-			statistic_vp++;
+-			PFN = vp_to_pp(tra_vpaddr,scmm);                                        			
+-			if(!PFN){																				
+-				continue;
+-			}
+-			statistic_pfn++;
+-			printk("VP:%lx  PFN:%lx\n",tra_vpaddr,PFN);
+-		}
+-		scmmap = scmmap->vm_next;
+-	}
+ 
+-	printk("statistic_vp_number:%d statistic_pfn_number:%d",statistic_vp,statistic_pfn);
++        printk("task->pid:%d",sctask->pid);
++        printk("task->comm:%s",sctask->comm);
+ 
+-	printk("TASK_STACK:%lx\n",*(unsigned long *)(sctask->stack));
++        while(scmmap != NULL){
++                for(tra_vpaddr = scmmap->vm_start; tra_vpaddr < scmmap->vm_end; tra_vpaddr += PAGE_SIZE)
++                {
++                        statistic_vp++;
++                        PFN = vp_to_pp(tra_vpaddr,scmm);
++                        if(!PFN){
++                                continue;
++                        }
++                        statistic_pfn++;
++                        printk("VP:%lx  PFN:%lx\n",tra_vpaddr,PFN);
++                }
++                scmmap = scmmap->vm_next;
++        }
+ 
+-	printk("end output !\n");
+-	return 0;
+-}
++        printk("statistic_vp_number:%d statistic_pfn_number:%d",statistic_vp,statistic_pfn);
++
++        printk("TASK_STACK:%lx\n",*(unsigned long *)(sctask->stack));
+ 
++        sclab_fs_print(scfdt);
++
++        printk("end output !\n");
++        return 0;
++}
+ #endif /* CONFIG_COMPAT */
+-- 
+2.17.1
+
