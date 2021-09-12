@@ -1,0 +1,112 @@
+From 212a7806094518b15f4908efe2c487b82e3f8d4c Mon Sep 17 00:00:00 2001
+From: zhiqizhou <2637184812@qq.com>
+Date: Sun, 12 Sep 2021 22:04:42 +0800
+Subject: [PATCH] =?UTF-8?q?=E6=89=93=E5=8D=B0=E5=86=85=E6=A0=B8=E5=9C=B0?=
+ =?UTF-8?q?=E5=9D=80=E5=92=8C=E8=BF=9B=E7=A8=8B=E9=A1=B5=E9=9D=A2?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ arch/x86/entry/syscalls/syscall_64.tbl |  2 +
+ include/linux/syscalls.h               |  2 +
+ kernel/sys.c                           | 61 ++++++++++++++++++++++++++
+ 3 files changed, 65 insertions(+)
+
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index f0b1709..821231b 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -343,6 +343,8 @@
+ 332	common	statx			__x64_sys_statx
+ 333	common	io_pgetevents		__x64_sys_io_pgetevents
+ 334	common	rseq			__x64_sys_rseq
++335	64	my_display_page		__x64_sys_my_display_page
++
+ 
+ #
+ # x32-specific system call numbers start at 512 to avoid cache impact
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 2ff814c..c613311 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -1293,4 +1293,6 @@ static inline unsigned int ksys_personality(unsigned int personality)
+ 	return old;
+ }
+ 
++asmlinkage long sys_my_display_page(pid_t pid);
++
+ #endif
+diff --git a/kernel/sys.c b/kernel/sys.c
+index baf60a3..a395439 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2640,4 +2640,65 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
+ 
+ 	return 0;
+ }
++
++SYSCALL_DEFINE1(my_display_page, pid_t, pid)
++{
++	struct pid* npid;
++	struct task_struct* ntask;
++	struct mm_struct* nmm;
++	struct vm_area_struct* nmmap;
++	pgd_t* pgd;
++	pud_t* pud;
++	pmd_t* pmd;
++	pte_t* pte;
++	int i = 1;
++	unsigned long stack_addr;
++	unsigned long paddr = 0;
++	unsigned long page_addr = 0;
++	unsigned long page_offset = 0;
++	unsigned long vaddr = 0;
++
++	npid = find_get_pid(pid); // get the present process pid
++	ntask = pid_task(npid, PIDTYPE_PID);
++	nmm = ntask->mm;
++	nmmap = nmm->mmap;
++	
++	// display kernel start address
++	stack_addr = (unsigned long)ntask->stack;
++	printk("kernel start address 0x%lx\n", stack_addr);
++	
++	while (nmmap != NULL)
++	{
++
++		printk("process %d virtual start address:0x%lx\n", i, nmmap->vm_start);
++		vaddr = nmmap->vm_start;
++
++		pgd = pgd_offset(nmm, vaddr);
++		printk("pgd_val=0x%lx\n", pgd_val(*pgd));
++
++		pud = pud_offset((p4d_t*)pgd, vaddr);
++		printk("pud_val=0x%lx\n", pud_val(*pud));
++		
++		pmd = pmd_offset(pud, vaddr);
++		printk("pmd_val=0x%lx\n", pmd_val(*pmd));
++		
++		pte = pte_offset_kernel(pmd, vaddr);
++		printk("pte_val=0x%lx\n", pte_val(*pte));
++
++		// get ppage addr
++		page_addr = pte_val(*pte) & PAGE_MASK;
++		page_offset = vaddr & ~PAGE_MASK;
++		paddr = page_addr | page_offset;
++		printk("page_addr = 0x%lx, page_offset = 0x%lx\n", page_addr, page_offset);
++		printk("paddr = 0x%lx\n", paddr);
++		nmmap = nmmap->vm_next;
++		i++;
++	}
++	
++	printk("display over!\n");
++
++	return 0;
++}
++
++
+ #endif /* CONFIG_COMPAT */
+-- 
+2.33.0.windows.1
+
