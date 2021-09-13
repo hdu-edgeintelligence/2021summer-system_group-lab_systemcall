@@ -1,0 +1,25 @@
+From ce8205a660a324efa7f107d767fffedcc3fb8e19 Mon Sep 17 00:00:00 2001
+From: wangguokun <wgkgit@126.com>
+Date: Mon, 13 Sep 2021 19:09:45 +0800
+Subject: [PATCH] [fix]fix the error code judge within print disk number
+
+---
+ kernel/sys.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sys.c b/kernel/sys.c
+index e010ec4d..0b990f24 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2731,7 +2731,7 @@ static void sclab_fs_print_disk(struct file * scfl)
+         {
+                 dblk = tra;
+                 erro = sclab_buffer_bmap(scfl,&dblk);
+-                if(!erro){
++                if(erro < 0){
+                         printk("Can't found disk number, the error code is %d\n",erro);
+                         return;
+                 }
+-- 
+2.17.1
+
