@@ -1,0 +1,16 @@
+--- unistd.h.old	2021-10-11 13:45:35.641057923 +0800
++++ unistd.h	2021-10-12 18:44:53.154683457 +0800
+@@ -737,8 +737,12 @@
+ #define __NR_rseq 293
+ __SYSCALL(__NR_rseq, sys_rseq)
+ 
++#define __NR_mysyscall 294
++__SYSCALL(__NR_mysyscall, sys_mysyscall)
++
+ #undef __NR_syscalls
+-#define __NR_syscalls 294
++//#define __NR_syscalls 294
++#define __NR_syscalls 295
+ 
+ /*
+  * 32 bit systems traditionally used different

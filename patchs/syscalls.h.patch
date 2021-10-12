@@ -1,0 +1,14 @@
+--- syscalls.h.old	2021-10-11 13:35:54.770576032 +0800
++++ syscalls.h	2021-10-12 22:49:31.204957684 +0800
+@@ -1117,8 +1117,10 @@
+  */
+ asmlinkage long sys_ni_syscall(void);
+ 
+-#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
+ 
++asmlinkage long sys_mysyscall(void);
++
++#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
+ 
+ /*
+  * Kernel code should not call syscalls (i.e., sys_xyzyyz()) directly.

@@ -1,0 +1,14 @@
+--- sys.c.old	2021-10-11 13:52:41.635604809 +0800
++++ sys.c	2021-10-12 22:50:32.691867510 +0800
+@@ -2641,3 +2641,11 @@
+ 	return 0;
+ }
+ #endif /* CONFIG_COMPAT */
++
++/*mysyscall*/
++
++SYSCALL_DEFINE0(mysyscall)
++{
++	printk(KERN_ALERT "my_syscall by %d : %s",current->pid,current->comm);
++	return 0;
++}
