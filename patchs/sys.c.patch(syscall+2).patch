@@ -1,0 +1,15 @@
+--- sys.c.old	2021-10-11 13:52:41.635604809 +0800
++++ sys.c	2021-10-15 09:29:35.160001300 +0800
+@@ -2641,3 +2641,12 @@
+ 	return 0;
+ }
+ #endif /* CONFIG_COMPAT */
++
++/*mysyscall*/
++
++SYSCALL_DEFINE0(mysyscall)
++{
++	printk(KERN_ALERT "my_syscall by %d : %s",current->pid,current->comm);
++	printk(KERN_ALERT "The base of kernel_stack is %ps .",current->stack+THREAD_SIZE);
++	return 0;
++}
