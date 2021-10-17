@@ -1,0 +1,101 @@
+--- /usr/src/linux-4.19.204/kernel/sys.c.old	2021-10-11 13:52:41.635604809 +0800
++++ /usr/src/linux-4.19.204/kernel/sys.c	2021-10-17 18:43:25.860000104 +0800
+@@ -2641,3 +2641,98 @@
+ 	return 0;
+ }
+ #endif /* CONFIG_COMPAT */
++
++/*mysyscall*/
++
++static long find_pfn(unsigned long p){
++
++	pgd_t * pgd = pgd_offset(current->mm, p);
++	if (pgd_none(*pgd)) {
++		return -1;
++	}
++    	pud_t * pud = pud_offset(pgd, p);
++	if (pud_none(*pud)) {
++		return -2;
++	}
++	pmd_t * pmd =pmd_offset(pud,p);
++	if (pmd_none(*pmd)) {
++		return -3;
++	}
++	pte_t * pte =pte_offset_kernel(pmd,p);
++	if (pte_none(*pte)) {
++		return -4;
++	}
++/*
++	unsigned long page_addr = 0;
++	unsigned long page_offset = 0;
++	unsigned long physical_addr = 0;
++ 
++	page_addr = pte_val(*pte) & PAGE_MASK;
++	page_offset = p & ~PAGE_MASK;
++	physical_addr = page_addr | page_offset;
++*/
++	long pfn;
++
++	pfn = pte_pfn(*pte);
++
++    	//printk(KERN_ALERT "pfn = %u", pfn);
++	//printk("virtual_addr = %ps, physical_addr = %ps\n", p, physical_addr);
++
++
++	return pfn;
++}
++
++static void printpfn(struct vm_area_struct * vma){
++	unsigned long start = vma->vm_start;
++	unsigned long end = vma->vm_end;
++	printk(KERN_ALERT "%016lx to %016lx",start,end);
++	unsigned long p;
++	long last_pfn=-2;
++
++	long pfn_start=-2;
++
++	for(p =start;p<=end;p++){
++		long pfn=find_pfn(p);
++		if((last_pfn!=pfn)){
++			if(pfn>last_pfn+1 || last_pfn<0){
++				if(last_pfn>0)
++					printk("%ld->%ld",pfn_start,last_pfn);
++				pfn_start = pfn;
++			}
++			if(pfn<0){
++				if(last_pfn>0){
++					printk("%ld->%ld",pfn_start,last_pfn);
++				}
++				pfn_start=-2;
++			}
++			if(pfn==-1){
++				printk("not mapped in pgd\n");
++			}
++			if(pfn==-2){
++				printk("not mapped in pud\n");
++			}
++			if(pfn==-3){
++				printk("not mapped in pmd\n");
++			}
++			if(pfn==-4){
++				printk("not mapped in pte\n");
++			}
++			last_pfn=pfn;
++		}
++	}
++}
++SYSCALL_DEFINE0(mysyscall)
++{
++	printk(KERN_ALERT "my_syscall by %d called %s",current->pid,current->comm);
++
++	printk(KERN_ALERT "print pfn");
++	struct vm_area_struct * vma = current->mm->mmap;
++	while(vma){
++		printpfn(vma);
++		vma=vma->vm_next;
++	}
++
++	printk(KERN_ALERT "The base of kernel_stack is %ps .",current->stack+THREAD_SIZE);
++	printk(KERN_ALERT "fin .");
++	return 0;
++}
